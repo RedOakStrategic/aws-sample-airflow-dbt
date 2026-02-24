@@ -47,6 +47,11 @@ variable "state_machine_arn" {
   description = "Step Functions state machine ARN to invoke"
 }
 
+variable "data_lake_bucket_arn" {
+  type        = string
+  description = "S3 bucket ARN for data lake storage (used by dbt)"
+}
+
 variable "environment_class" {
   type        = string
   description = "MWAA environment class"

@@ -98,15 +98,16 @@ module "workflow" {
 module "orchestration" {
   source = "./modules/orchestration"
 
-  environment        = var.environment
-  project_name       = var.project_name
-  dags_bucket_name   = module.storage.dags_bucket_name
-  dags_bucket_arn    = module.storage.dags_bucket_arn
-  state_machine_arn  = module.workflow.state_machine_arn
-  environment_class  = var.mwaa_environment_class
-  airflow_version    = var.mwaa_airflow_version
-  max_workers        = var.mwaa_max_workers
-  min_workers        = var.mwaa_min_workers
+  environment          = var.environment
+  project_name         = var.project_name
+  dags_bucket_name     = module.storage.dags_bucket_name
+  dags_bucket_arn      = module.storage.dags_bucket_arn
+  state_machine_arn    = module.workflow.state_machine_arn
+  data_lake_bucket_arn = module.storage.data_lake_bucket_arn
+  environment_class    = var.mwaa_environment_class
+  airflow_version      = var.mwaa_airflow_version
+  max_workers          = var.mwaa_max_workers
+  min_workers          = var.mwaa_min_workers
 
   # VPC configuration - either create new or use existing
   create_vpc         = var.create_vpc

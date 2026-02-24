@@ -13,7 +13,6 @@ lakehouse:
       work_group: lakehouse-mvp-sandbox-workgroup
       num_retries: 3
       poll_interval: 1.0
-      # MWAA uses IAM role, no profile needed
 
 elementary:
   target: sandbox

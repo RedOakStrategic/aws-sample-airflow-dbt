@@ -17,7 +17,9 @@ from airflow.providers.amazon.aws.sensors.step_function import StepFunctionExecu
 
 # Configuration - in production, use Airflow Variables
 STATE_MACHINE_ARN = 'arn:aws:states:us-east-1:088130860316:stateMachine:lakehouse-mvp-sandbox-data-pipeline'
-DBT_PROJECT_PATH = '/usr/local/airflow/dbt_project'
+# MWAA syncs S3 dags bucket to /usr/local/airflow/dags/
+DBT_PROJECT_PATH = '/usr/local/airflow/dags/dbt_project'
+DBT_PROFILES_DIR = '/usr/local/airflow/dags/dbt_project'
 
 default_args = {
     'owner': 'data-engineering',
@@ -60,25 +62,25 @@ with DAG(
     # Install dbt dependencies (packages like elementary)
     dbt_deps = BashOperator(
         task_id='dbt_deps',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt deps --profiles-dir .',
+        bash_command=f'cd {DBT_PROJECT_PATH} && dbt deps --profiles-dir {DBT_PROFILES_DIR}',
     )
 
     # Run staging models first (views on raw data)
     dbt_run_staging = BashOperator(
         task_id='dbt_run_staging',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir . --select staging',
+        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir {DBT_PROFILES_DIR} --select staging',
     )
 
     # Run intermediate models (enriched data)
     dbt_run_intermediate = BashOperator(
         task_id='dbt_run_intermediate',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir . --select intermediate',
+        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir {DBT_PROFILES_DIR} --select intermediate',
     )
 
     # Run mart models (business-ready Iceberg tables)
     dbt_run_marts = BashOperator(
         task_id='dbt_run_marts',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir . --select marts',
+        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir {DBT_PROFILES_DIR} --select marts',
     )
 
     # ============================================
@@ -86,7 +88,7 @@ with DAG(
     # ============================================
     dbt_test = BashOperator(
         task_id='dbt_test',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt test --profiles-dir .',
+        bash_command=f'cd {DBT_PROJECT_PATH} && dbt test --profiles-dir {DBT_PROFILES_DIR}',
     )
 
     # ============================================

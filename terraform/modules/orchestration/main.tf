@@ -189,6 +189,79 @@ resource "aws_iam_role_policy" "mwaa_execution_pipeline" {
   })
 }
 
+# dbt/Athena execution policy for data transformations
+resource "aws_iam_role_policy" "mwaa_execution_dbt" {
+  name = "${local.mwaa_name}-execution-dbt-policy"
+  role = aws_iam_role.mwaa_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AthenaQueryExecution"
+        Effect = "Allow"
+        Action = [
+          "athena:StartQueryExecution",
+          "athena:StopQueryExecution",
+          "athena:GetQueryExecution",
+          "athena:GetQueryResults",
+          "athena:GetWorkGroup",
+          "athena:BatchGetQueryExecution"
+        ]
+        Resource = [
+          "arn:aws:athena:*:*:workgroup/*"
+        ]
+      },
+      {
+        Sid    = "GlueCatalogAccess"
+        Effect = "Allow"
+        Action = [
+          "glue:GetDatabase",
+          "glue:GetDatabases",
+          "glue:GetTable",
+          "glue:GetTables",
+          "glue:GetPartition",
+          "glue:GetPartitions",
+          "glue:BatchGetPartition",
+          "glue:CreateTable",
+          "glue:UpdateTable",
+          "glue:DeleteTable",
+          "glue:BatchCreatePartition",
+          "glue:BatchDeletePartition"
+        ]
+        Resource = [
+          "arn:aws:glue:*:*:catalog",
+          "arn:aws:glue:*:*:database/*",
+          "arn:aws:glue:*:*:table/*"
+        ]
+      },
+      {
+        Sid    = "S3DataLakeAccess"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          var.data_lake_bucket_arn,
+          "${var.data_lake_bucket_arn}/*"
+        ]
+      },
+      {
+        Sid    = "LakeFormationAccess"
+        Effect = "Allow"
+        Action = [
+          "lakeformation:GetDataAccess"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # S3 folder structure for MWAA
 resource "aws_s3_object" "dags_folder" {
   bucket = var.dags_bucket_name

@@ -1,0 +1,74 @@
+version: 2
+
+models:
+  - name: fct_events
+    description: >
+      Fact table containing enriched event data with user context.
+      Stored as an Iceberg table partitioned by event_date for efficient time-based queries.
+      Located in the curated layer of the data lake.
+    columns:
+      - name: event_id
+        description: Unique identifier for the event
+        tests:
+          - not_null
+          - unique
+      - name: user_id
+        description: User who triggered the event
+        tests:
+          - not_null
+      - name: event_type
+        description: Type/category of the event
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['click', 'view', 'purchase', 'signup', 'login', 'logout']
+              config:
+                severity: warn
+      - name: event_timestamp
+        description: When the event occurred
+        tests:
+          - not_null
+      - name: event_date
+        description: Date portion of event_timestamp, used for partitioning
+        tests:
+          - not_null
+      - name: event_properties
+        description: JSON properties associated with the event
+      - name: username
+        description: Display name of the user who triggered the event
+      - name: user_email
+        description: Email address of the user
+      - name: user_is_active
+        description: Whether the user account is currently active
+      - name: created_at
+        description: When the event record was created
+
+  - name: dim_users
+    description: >
+      Dimension table containing user attributes for analytics.
+      Stored as an Iceberg table in the curated layer of the data lake.
+    columns:
+      - name: user_id
+        description: Unique identifier for the user
+        tests:
+          - not_null
+          - unique
+      - name: username
+        description: User's display name
+        tests:
+          - not_null
+      - name: email
+        description: User's email address
+        tests:
+          - not_null
+          - unique
+      - name: is_active
+        description: Whether the user account is active
+        tests:
+          - not_null
+      - name: created_at
+        description: When the user account was created
+        tests:
+          - not_null
+      - name: updated_at
+        description: When the user record was last updated

@@ -1,0 +1,37 @@
+# dbt Project Configuration for AWS Data Lakehouse MVP
+# Uses dbt-athena adapter for Athena engine connectivity
+
+name: 'lakehouse_mvp'
+version: '1.0.0'
+
+profile: 'lakehouse'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+# Model configurations by layer
+models:
+  lakehouse_mvp:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      +materialized: table
+      +schema: curated
+      +table_type: iceberg
+      +format: parquet
+      +write_compression: snappy
+
+# Variables for dynamic configuration
+vars:
+  data_lake_bucket: "{{ env_var('DATA_LAKE_BUCKET', 'lakehouse-mvp-data') }}"
+  environment: "{{ env_var('ENVIRONMENT', 'sandbox') }}"
+
+# Clean targets
+clean-targets:
+  - "target"
+  - "dbt_packages"

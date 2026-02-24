@@ -1,0 +1,263 @@
+{
+  "Comment": "Data Lakehouse Pipeline - Crawl, Transform, Catalog",
+  "StartAt": "RecordPipelineStart",
+  "States": {
+    "RecordPipelineStart": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "${MetadataTableName}",
+        "Item": {
+          "pipeline_name": {"S": "raw_to_curated"},
+          "execution_date": {"S.$": "$$.Execution.StartTime"},
+          "execution_id": {"S.$": "$$.Execution.Id"},
+          "status": {"S": "RUNNING"},
+          "start_time": {"S.$": "$$.Execution.StartTime"},
+          "triggered_by": {"S": "airflow"}
+        }
+      },
+      "ResultPath": null,
+      "Next": "StartRawCrawler",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "DynamoDB.AmazonDynamoDBException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
+    },
+    "StartRawCrawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "${RawCrawlerName}"
+      },
+      "ResultPath": null,
+      "Next": "WaitForRawCrawler",
+      "Retry": [
+        {
+          "ErrorEquals": ["Glue.CrawlerRunningException"],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 5,
+          "BackoffRate": 1.0
+        },
+        {
+          "ErrorEquals": ["States.TaskFailed", "Glue.AWSGlueException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
+    },
+    "WaitForRawCrawler": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "CheckRawCrawlerStatus"
+    },
+    "CheckRawCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "${RawCrawlerName}"
+      },
+      "ResultPath": "$.crawlerStatus",
+      "Next": "IsRawCrawlerComplete",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "Glue.AWSGlueException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
+    },
+    "IsRawCrawlerComplete": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "READY",
+          "Next": "RunDbtTransformations"
+        }
+      ],
+      "Default": "WaitForRawCrawler"
+    },
+    "RunDbtTransformations": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- dbt run placeholder - actual implementation uses dbt CLI\nSELECT 1 as placeholder",
+        "WorkGroup": "${AthenaWorkgroup}",
+        "QueryExecutionContext": {
+          "Database": "${GlueDatabaseName}"
+        }
+      },
+      "ResultPath": "$.athenaResult",
+      "Next": "StartCuratedCrawler",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "Athena.InvalidRequestException"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
+    },
+    "StartCuratedCrawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "${CuratedCrawlerName}"
+      },
+      "ResultPath": null,
+      "Next": "WaitForCuratedCrawler",
+      "Retry": [
+        {
+          "ErrorEquals": ["Glue.CrawlerRunningException"],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 5,
+          "BackoffRate": 1.0
+        },
+        {
+          "ErrorEquals": ["States.TaskFailed", "Glue.AWSGlueException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
+    },
+    "WaitForCuratedCrawler": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "CheckCuratedCrawlerStatus"
+    },
+    "CheckCuratedCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "${CuratedCrawlerName}"
+      },
+      "ResultPath": "$.crawlerStatus",
+      "Next": "IsCuratedCrawlerComplete",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "Glue.AWSGlueException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
+    },
+    "IsCuratedCrawlerComplete": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.crawlerStatus.Crawler.State",
+          "StringEquals": "READY",
+          "Next": "RecordPipelineSuccess"
+        }
+      ],
+      "Default": "WaitForCuratedCrawler"
+    },
+    "RecordPipelineSuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${MetadataTableName}",
+        "Key": {
+          "pipeline_name": {"S": "raw_to_curated"},
+          "execution_date": {"S.$": "$$.Execution.StartTime"}
+        },
+        "UpdateExpression": "SET #status = :status, end_time = :end_time",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {"S": "SUCCEEDED"},
+          ":end_time": {"S.$": "$$.State.EnteredTime"}
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "DynamoDB.AmazonDynamoDBException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "End": true
+    },
+    "RecordPipelineFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${MetadataTableName}",
+        "Key": {
+          "pipeline_name": {"S": "raw_to_curated"},
+          "execution_date": {"S.$": "$$.Execution.StartTime"}
+        },
+        "UpdateExpression": "SET #status = :status, end_time = :end_time, error_message = :error",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {"S": "FAILED"},
+          ":end_time": {"S.$": "$$.State.EnteredTime"},
+          ":error": {"S.$": "States.Format('{}', $.error)"}
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "DynamoDB.AmazonDynamoDBException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "End": true
+    }
+  }
+}

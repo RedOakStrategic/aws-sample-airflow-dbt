@@ -1,0 +1,5 @@
+{"event_id": "evt-001", "user_id": "usr-101", "event_type": "page_view", "page": "/home", "timestamp": "2026-02-23T10:00:00Z", "session_id": "sess-001"}
+{"event_id": "evt-002", "user_id": "usr-102", "event_type": "click", "page": "/products", "timestamp": "2026-02-23T10:05:00Z", "session_id": "sess-002"}
+{"event_id": "evt-003", "user_id": "usr-101", "event_type": "purchase", "page": "/checkout", "timestamp": "2026-02-23T10:15:00Z", "session_id": "sess-001", "amount": 99.99}
+{"event_id": "evt-004", "user_id": "usr-103", "event_type": "page_view", "page": "/about", "timestamp": "2026-02-23T10:20:00Z", "session_id": "sess-003"}
+{"event_id": "evt-005", "user_id": "usr-102", "event_type": "signup", "page": "/register", "timestamp": "2026-02-23T10:25:00Z", "session_id": "sess-002"}

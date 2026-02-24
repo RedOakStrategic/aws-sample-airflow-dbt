@@ -1,0 +1,52 @@
+# Example dbt profile for Athena adapter
+# Copy to ~/.dbt/profiles.yml and update with your settings
+#
+# Prerequisites:
+# 1. Install dbt-athena-community: pip install dbt-athena-community
+# 2. Configure AWS credentials (via AWS CLI, environment variables, or IAM role)
+# 3. Update the values below with your environment-specific settings
+
+lakehouse:
+  target: dev
+  outputs:
+    dev:
+      type: athena
+      # S3 location for Athena query results
+      s3_staging_dir: s3://your-athena-results-bucket/query-results/
+      # S3 location for dbt to write Iceberg table data
+      s3_data_dir: s3://your-data-lake-bucket/curated/
+      # AWS region
+      region_name: us-east-1
+      # Glue database name
+      database: lakehouse_sandbox_lakehouse
+      # Default schema for models
+      schema: curated
+      # Athena workgroup (optional, uses 'primary' if not specified)
+      work_group: lakehouse-sandbox-workgroup
+      # Number of retries for Athena queries
+      num_retries: 3
+      # Poll interval in seconds for query status
+      poll_interval: 1.0
+      # AWS profile name (optional, uses default if not specified)
+      # aws_profile_name: ros-sandbox
+
+    prod:
+      type: athena
+      s3_staging_dir: s3://your-prod-athena-results-bucket/query-results/
+      s3_data_dir: s3://your-prod-data-lake-bucket/curated/
+      region_name: us-east-1
+      database: lakehouse_prod_lakehouse
+      schema: curated
+      work_group: lakehouse-prod-workgroup
+      num_retries: 3
+      poll_interval: 1.0
+
+# Connection settings reference:
+# - s3_staging_dir: Required. Where Athena stores query results
+# - s3_data_dir: Required for Iceberg tables. Where dbt writes table data
+# - region_name: AWS region for Athena and Glue
+# - database: Glue Data Catalog database name
+# - schema: Default schema (maps to Glue database prefix)
+# - work_group: Athena workgroup for query execution and cost control
+# - num_retries: Number of times to retry failed queries
+# - poll_interval: Seconds between query status checks

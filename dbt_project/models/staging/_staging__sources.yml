@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: raw
+    database: lakehouse-mvp_sandbox_lakehouse
+    schema: ""
+    tables:
+      - name: events
+        description: Raw event data from landing zone
+      - name: users
+        description: Raw user data from landing zone

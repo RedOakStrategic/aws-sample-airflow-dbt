@@ -1,0 +1,91 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw data layer containing unprocessed source data
+    database: "{{ var('glue_database', 'lakehouse_mvp_sandbox_lakehouse') }}"
+    schema: raw
+    tables:
+      - name: events
+        description: Raw event data from source systems
+        columns:
+          - name: event_id
+            description: Unique identifier for the event
+          - name: user_id
+            description: User who triggered the event
+          - name: event_type
+            description: Type/category of the event
+          - name: event_timestamp
+            description: When the event occurred
+          - name: event_properties
+            description: JSON properties associated with the event
+          - name: created_at
+            description: When the record was created in the source system
+
+      - name: users
+        description: Raw user data from source systems
+        columns:
+          - name: user_id
+            description: Unique identifier for the user
+          - name: username
+            description: User's display name
+          - name: email
+            description: User's email address
+          - name: created_at
+            description: When the user account was created
+          - name: updated_at
+            description: When the user record was last updated
+          - name: is_active
+            description: Whether the user account is active
+
+models:
+  - name: stg_raw_events
+    description: Staged events data with cleaned and standardized fields
+    columns:
+      - name: event_id
+        description: Unique identifier for the event
+        tests:
+          - not_null
+          - unique
+      - name: user_id
+        description: User who triggered the event
+        tests:
+          - not_null
+      - name: event_type
+        description: Type/category of the event
+        tests:
+          - not_null
+      - name: event_timestamp
+        description: When the event occurred (cast to TIMESTAMP)
+        tests:
+          - not_null
+      - name: event_properties
+        description: JSON properties associated with the event
+      - name: created_at
+        description: When the record was created (cast to TIMESTAMP)
+
+  - name: stg_raw_users
+    description: Staged users data with cleaned and standardized fields
+    columns:
+      - name: user_id
+        description: Unique identifier for the user
+        tests:
+          - not_null
+          - unique
+      - name: username
+        description: User's display name
+        tests:
+          - not_null
+      - name: email
+        description: User's email address
+        tests:
+          - not_null
+          - unique
+      - name: created_at
+        description: When the user account was created (cast to TIMESTAMP)
+      - name: updated_at
+        description: When the user record was last updated (cast to TIMESTAMP)
+      - name: is_active
+        description: Whether the user account is active
+        tests:
+          - not_null

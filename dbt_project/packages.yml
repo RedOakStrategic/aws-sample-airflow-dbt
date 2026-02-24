@@ -1,0 +1,20 @@
+# dbt packages for AWS Data Lakehouse MVP
+#
+# Install packages by running: dbt deps
+#
+# Note: dbt-athena-community is installed via pip, not as a dbt package.
+# Install it with: pip install dbt-athena-community
+
+packages:
+  # dbt-athena-community adapter for Athena connectivity
+  # This is the community-maintained adapter that supports Iceberg tables
+  # Install via pip: pip install dbt-athena-community>=1.7.0
+  
+  # dbt-utils: Common utility macros for dbt projects
+  - package: dbt-labs/dbt_utils
+    version: [">=1.0.0", "<2.0.0"]
+
+  # dbt-expectations: Data quality testing macros (optional)
+  # Provides additional test types beyond dbt's built-in tests
+  - package: calogica/dbt_expectations
+    version: [">=0.10.0", "<0.11.0"]

@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: int_events_enriched
+    description: >
+      Intermediate ephemeral model that enriches events with user information.
+      Joins staged events with staged users to provide user context for each event.
+    columns:
+      - name: event_id
+        description: Unique identifier for the event
+      - name: user_id
+        description: User who triggered the event
+      - name: event_type
+        description: Type/category of the event
+      - name: event_timestamp
+        description: When the event occurred
+      - name: event_date
+        description: Date portion of event_timestamp for partitioning
+      - name: event_properties
+        description: JSON properties associated with the event
+      - name: event_created_at
+        description: When the event record was created
+      - name: username
+        description: Display name of the user who triggered the event
+      - name: user_email
+        description: Email address of the user
+      - name: user_is_active
+        description: Whether the user account is currently active
+      - name: user_created_at
+        description: When the user account was created

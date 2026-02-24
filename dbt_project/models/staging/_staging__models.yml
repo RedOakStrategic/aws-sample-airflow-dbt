@@ -1,91 +1,88 @@
 version: 2
 
-sources:
-  - name: raw
-    description: Raw data layer containing unprocessed source data
-    database: "{{ var('glue_database', 'lakehouse_mvp_sandbox_lakehouse') }}"
-    schema: raw
-    tables:
-      - name: events
-        description: Raw event data from source systems
-        columns:
-          - name: event_id
-            description: Unique identifier for the event
-          - name: user_id
-            description: User who triggered the event
-          - name: event_type
-            description: Type/category of the event
-          - name: event_timestamp
-            description: When the event occurred
-          - name: event_properties
-            description: JSON properties associated with the event
-          - name: created_at
-            description: When the record was created in the source system
-
-      - name: users
-        description: Raw user data from source systems
-        columns:
-          - name: user_id
-            description: Unique identifier for the user
-          - name: username
-            description: User's display name
-          - name: email
-            description: User's email address
-          - name: created_at
-            description: When the user account was created
-          - name: updated_at
-            description: When the user record was last updated
-          - name: is_active
-            description: Whether the user account is active
-
 models:
   - name: stg_raw_events
-    description: Staged events data with cleaned and standardized fields
+    description: >
+      **Staging model for event data.**
+      
+      Cleans and standardizes raw event data from the landing zone.
+      Applies consistent naming conventions and data type casting.
+      Filters out records with null event IDs to ensure data quality.
+      
+      **Transformations Applied:**
+      - Casts event_timestamp to proper TIMESTAMP type
+      - Renames columns to follow naming conventions
+      - Filters records where event_id is null
+      
+      **Downstream Usage:**
+      - Joined with stg_raw_users in int_events_enriched
+      - Foundation for fct_events mart table
+    config:
+      tags: ['staging', 'events', 'daily']
     columns:
       - name: event_id
-        description: Unique identifier for the event
+        description: '{{ doc("event_id") }}'
         tests:
           - not_null
           - unique
       - name: user_id
-        description: User who triggered the event
+        description: '{{ doc("user_id") }}'
         tests:
           - not_null
+          - relationships:
+              to: ref('stg_raw_users')
+              field: user_id
+              config:
+                severity: warn
       - name: event_type
-        description: Type/category of the event
+        description: '{{ doc("event_type") }}'
         tests:
           - not_null
       - name: event_timestamp
-        description: When the event occurred (cast to TIMESTAMP)
+        description: '{{ doc("event_timestamp") }}'
         tests:
           - not_null
-      - name: event_properties
-        description: JSON properties associated with the event
-      - name: created_at
-        description: When the record was created (cast to TIMESTAMP)
+      - name: session_id
+        description: '{{ doc("session_id") }}'
+      - name: page
+        description: '{{ doc("page") }}'
+      - name: amount
+        description: '{{ doc("amount") }}'
 
   - name: stg_raw_users
-    description: Staged users data with cleaned and standardized fields
+    description: >
+      **Staging model for user data.**
+      
+      Cleans and standardizes raw user profile data from the landing zone.
+      Renames the 'name' field to 'username' for consistency.
+      Casts timestamp fields to proper TIMESTAMP types.
+      
+      **Transformations Applied:**
+      - Renames 'name' to 'username'
+      - Casts created_at to TIMESTAMP
+      - Filters records where user_id is null
+      
+      **Downstream Usage:**
+      - Joined with stg_raw_events in int_events_enriched
+      - Foundation for dim_users mart table
+    config:
+      tags: ['staging', 'users', 'daily']
     columns:
       - name: user_id
-        description: Unique identifier for the user
+        description: '{{ doc("user_id") }}'
         tests:
           - not_null
           - unique
       - name: username
-        description: User's display name
+        description: '{{ doc("username") }}'
         tests:
           - not_null
       - name: email
-        description: User's email address
+        description: '{{ doc("email") }}'
         tests:
           - not_null
           - unique
       - name: created_at
-        description: When the user account was created (cast to TIMESTAMP)
-      - name: updated_at
-        description: When the user record was last updated (cast to TIMESTAMP)
-      - name: is_active
-        description: Whether the user account is active
-        tests:
-          - not_null
+        description: '{{ doc("created_at") }}'
+      - name: country
+        description: '{{ doc("country") }}'

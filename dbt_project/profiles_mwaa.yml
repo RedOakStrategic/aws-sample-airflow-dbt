@@ -1,0 +1,30 @@
+# dbt profiles for MWAA environment
+# Uses IAM role authentication (no aws_profile_name needed)
+lakehouse:
+  target: sandbox
+  outputs:
+    sandbox:
+      type: athena
+      s3_staging_dir: s3://lakehouse-mvp-sandbox-data-lake/athena-results/
+      s3_data_dir: s3://lakehouse-mvp-sandbox-data-lake/curated/
+      region_name: us-east-1
+      database: awsdatacatalog
+      schema: lakehouse-mvp_sandbox_lakehouse
+      work_group: lakehouse-mvp-sandbox-workgroup
+      num_retries: 3
+      poll_interval: 1.0
+      # MWAA uses IAM role, no profile needed
+
+elementary:
+  target: sandbox
+  outputs:
+    sandbox:
+      type: athena
+      s3_staging_dir: s3://lakehouse-mvp-sandbox-data-lake/athena-results/
+      s3_data_dir: s3://lakehouse-mvp-sandbox-data-lake/curated/
+      region_name: us-east-1
+      database: awsdatacatalog
+      schema: lakehouse-mvp_sandbox_lakehouse
+      work_group: lakehouse-mvp-sandbox-workgroup
+      num_retries: 3
+      poll_interval: 1.0

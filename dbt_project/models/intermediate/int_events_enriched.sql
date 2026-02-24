@@ -5,14 +5,14 @@ SELECT
     e.event_id,
     e.user_id,
     e.event_type,
-    e.event_timestamp,
-    DATE(e.event_timestamp) as event_date,
-    e.event_properties,
-    e.created_at as event_created_at,
+    from_iso8601_timestamp(e.event_timestamp) as event_timestamp,
+    DATE(from_iso8601_timestamp(e.event_timestamp)) as event_date,
+    e.session_id,
+    e.page,
+    e.amount,
     u.username,
     u.email as user_email,
-    u.is_active as user_is_active,
-    u.created_at as user_created_at
+    u.country as user_country
 FROM {{ ref('stg_raw_events') }} e
 LEFT JOIN {{ ref('stg_raw_users') }} u
     ON e.user_id = u.user_id

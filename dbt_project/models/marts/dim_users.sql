@@ -6,7 +6,7 @@
     table_type='iceberg',
     format='parquet',
     write_compression='snappy',
-    s3_data_dir='s3://' ~ var('data_lake_bucket') ~ '/curated/dim_users/'
+    s3_data_dir='s3://lakehouse-mvp-sandbox-data-lake/curated/dbt_dim_users/'
   )
 }}
 
@@ -14,7 +14,6 @@ SELECT
     user_id,
     username,
     email,
-    is_active,
-    created_at,
-    updated_at
+    from_iso8601_timestamp(created_at) as created_at,
+    country
 FROM {{ ref('stg_raw_users') }}

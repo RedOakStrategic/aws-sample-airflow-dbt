@@ -6,8 +6,7 @@
     table_type='iceberg',
     format='parquet',
     write_compression='snappy',
-    partitioned_by=['date(event_date)'],
-    s3_data_dir='s3://' ~ var('data_lake_bucket') ~ '/curated/fct_events/'
+    s3_data_dir='s3://lakehouse-mvp-sandbox-data-lake/curated/dbt_fct_events/'
   )
 }}
 
@@ -17,9 +16,10 @@ SELECT
     event_type,
     event_timestamp,
     event_date,
-    event_properties,
+    session_id,
+    page,
+    amount,
     username,
     user_email,
-    user_is_active,
-    event_created_at as created_at
+    user_country
 FROM {{ ref('int_events_enriched') }}

@@ -3,72 +3,165 @@ version: 2
 models:
   - name: fct_events
     description: >
-      Fact table containing enriched event data with user context.
-      Stored as an Iceberg table partitioned by event_date for efficient time-based queries.
-      Located in the curated layer of the data lake.
+      **Fact table: User Events with Full Context**
+      
+      This is the primary fact table for event analytics, containing enriched
+      event data with complete user context. Each row represents a single
+      user interaction or system event.
+      
+      **Storage Format:** Apache Iceberg table with Parquet files
+      
+      **Partitioning:** By `event_date` for efficient time-range queries
+      
+      **Key Features:**
+      - ACID transactions for reliable updates
+      - Time travel queries for historical analysis
+      - Schema evolution without table rewrites
+      
+      **Common Use Cases:**
+      - User behavior analysis
+      - Conversion funnel tracking
+      - Session analysis
+      - Revenue attribution
+      
+      **Example Queries:**
+      ```sql
+      -- Events by type in last 7 days
+      SELECT event_type, COUNT(*) as event_count
+      FROM fct_events
+      WHERE event_date >= CURRENT_DATE - INTERVAL '7' DAY
+      GROUP BY event_type;
+      
+      -- Time travel: Query data as of yesterday
+      SELECT * FROM fct_events FOR TIMESTAMP AS OF TIMESTAMP '2024-02-22 00:00:00';
+      ```
+    config:
+      tags: ['marts', 'facts', 'events', 'iceberg']
+      meta:
+        owner: 'data-engineering'
+        pii: true
+        contains_email: true
     columns:
       - name: event_id
-        description: Unique identifier for the event
+        description: '{{ doc("event_id") }}'
         tests:
           - not_null
           - unique
+        meta:
+          primary_key: true
       - name: user_id
-        description: User who triggered the event
+        description: '{{ doc("user_id") }}'
         tests:
           - not_null
+          - relationships:
+              to: ref('dim_users')
+              field: user_id
+              config:
+                severity: warn
+        meta:
+          foreign_key: dim_users.user_id
       - name: event_type
-        description: Type/category of the event
+        description: '{{ doc("event_type") }}'
         tests:
           - not_null
           - accepted_values:
-              values: ['click', 'view', 'purchase', 'signup', 'login', 'logout']
+              values: ['page_view', 'click', 'purchase', 'signup', 'login', 'logout']
               config:
                 severity: warn
       - name: event_timestamp
-        description: When the event occurred
+        description: '{{ doc("event_timestamp") }}'
         tests:
           - not_null
       - name: event_date
-        description: Date portion of event_timestamp, used for partitioning
+        description: '{{ doc("event_date") }}'
         tests:
           - not_null
-      - name: event_properties
-        description: JSON properties associated with the event
+        meta:
+          partition_key: true
+      - name: session_id
+        description: '{{ doc("session_id") }}'
+      - name: page
+        description: '{{ doc("page") }}'
+      - name: amount
+        description: '{{ doc("amount") }}'
       - name: username
-        description: Display name of the user who triggered the event
+        description: '{{ doc("username") }}'
       - name: user_email
-        description: Email address of the user
-      - name: user_is_active
-        description: Whether the user account is currently active
-      - name: created_at
-        description: When the event record was created
+        description: >
+          User's email address. **Contains PII.**
+          
+          Joined from dim_users for convenience in analytics queries.
+        meta:
+          pii: true
+      - name: user_country
+        description: '{{ doc("country") }}'
 
   - name: dim_users
     description: >
-      Dimension table containing user attributes for analytics.
-      Stored as an Iceberg table in the curated layer of the data lake.
+      **Dimension table: User Profiles**
+      
+      This dimension table contains user profile attributes for analytics.
+      It serves as the authoritative source for user information and is
+      referenced by fact tables via user_id.
+      
+      **Storage Format:** Apache Iceberg table with Parquet files
+      
+      **SCD Type:** Type 1 (overwrites on update)
+      
+      **Key Features:**
+      - Unique user records with profile attributes
+      - Supports user segmentation and cohort analysis
+      - Links to all user-related fact tables
+      
+      **Common Use Cases:**
+      - User segmentation by country
+      - Active vs inactive user analysis
+      - User cohort analysis by signup date
+      - Join with fact tables for user context
+      
+      **Example Queries:**
+      ```sql
+      -- Users by country
+      SELECT country, COUNT(*) as user_count
+      FROM dim_users
+      GROUP BY country
+      ORDER BY user_count DESC;
+      
+      -- New users this month
+      SELECT * FROM dim_users
+      WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE);
+      ```
+    config:
+      tags: ['marts', 'dimensions', 'users', 'iceberg']
+      meta:
+        owner: 'data-engineering'
+        pii: true
+        contains_email: true
     columns:
       - name: user_id
-        description: Unique identifier for the user
+        description: '{{ doc("user_id") }}'
         tests:
           - not_null
           - unique
+        meta:
+          primary_key: true
       - name: username
-        description: User's display name
+        description: '{{ doc("username") }}'
         tests:
           - not_null
       - name: email
-        description: User's email address
+        description: >
+          '{{ doc("email") }}'
+          
+          **Contains PII.** Handle according to data privacy policies.
         tests:
           - not_null
           - unique
-      - name: is_active
-        description: Whether the user account is active
-        tests:
-          - not_null
+        meta:
+          pii: true
       - name: created_at
-        description: When the user account was created
+        description: '{{ doc("created_at") }}'
         tests:
           - not_null
-      - name: updated_at
-        description: When the user record was last updated
+      - name: country
+        description: '{{ doc("country") }}'

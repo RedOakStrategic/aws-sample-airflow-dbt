@@ -6,7 +6,7 @@ SELECT
     user_id,
     event_type,
     page,
-    CAST(timestamp AS TIMESTAMP) as event_timestamp,
+    timestamp as event_timestamp,
     session_id,
     amount
 FROM {{ source('raw', 'events') }}

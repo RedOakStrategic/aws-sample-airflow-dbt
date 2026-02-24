@@ -21,6 +21,7 @@ __pycache__/
 venv/
 ENV/
 .venv/
+dbt-env/
 *.egg-info/
 dist/
 build/
@@ -30,6 +31,8 @@ dbt_project/target/
 dbt_project/dbt_packages/
 dbt_project/logs/
 dbt_project/.user.yml
+dbt_project/edr_target/
+edr_target/
 
 # IDE
 .idea/

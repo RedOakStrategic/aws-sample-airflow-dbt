@@ -3,28 +3,56 @@ version: 2
 models:
   - name: int_events_enriched
     description: >
-      Intermediate ephemeral model that enriches events with user information.
-      Joins staged events with staged users to provide user context for each event.
+      **Intermediate model enriching events with user context.**
+      
+      This ephemeral model joins staged events with staged users to provide
+      complete user context for each event. It serves as the foundation for
+      the fct_events mart table.
+      
+      **Business Logic:**
+      - LEFT JOIN ensures all events are included even if user is missing
+      - Extracts event_date from timestamp for partitioning
+      - Combines event and user attributes in a single denormalized view
+      
+      **Materialization:** Ephemeral (not persisted to database)
+      
+      **Why Ephemeral?**
+      - Reduces storage costs by not persisting intermediate results
+      - Always reflects current staging data
+      - Simplifies lineage by keeping transformation logic in one place
+    config:
+      tags: ['intermediate', 'events', 'users']
     columns:
       - name: event_id
-        description: Unique identifier for the event
+        description: '{{ doc("event_id") }}'
       - name: user_id
-        description: User who triggered the event
+        description: '{{ doc("user_id") }}'
       - name: event_type
-        description: Type/category of the event
+        description: '{{ doc("event_type") }}'
       - name: event_timestamp
-        description: When the event occurred
+        description: '{{ doc("event_timestamp") }}'
       - name: event_date
-        description: Date portion of event_timestamp for partitioning
-      - name: event_properties
-        description: JSON properties associated with the event
-      - name: event_created_at
-        description: When the event record was created
+        description: >
+          '{{ doc("event_date") }}'
+          
+          Extracted from event_timestamp using DATE() function.
+          Used as the partition key in downstream Iceberg tables.
+      - name: session_id
+        description: '{{ doc("session_id") }}'
+      - name: page
+        description: '{{ doc("page") }}'
+      - name: amount
+        description: '{{ doc("amount") }}'
       - name: username
-        description: Display name of the user who triggered the event
+        description: >
+          '{{ doc("username") }}'
+          
+          Joined from stg_raw_users. May be NULL if user record is missing.
       - name: user_email
-        description: Email address of the user
-      - name: user_is_active
-        description: Whether the user account is currently active
-      - name: user_created_at
-        description: When the user account was created
+        description: >
+          User's email address from the users table.
+          Renamed from 'email' to avoid ambiguity with potential event email fields.
+      - name: user_country
+        description: >
+          User's country code from the users table.
+          Useful for geographic segmentation of events.

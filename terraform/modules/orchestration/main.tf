@@ -202,6 +202,7 @@ resource "aws_s3_object" "requirements" {
   content = <<-EOF
     # Python requirements for MWAA
     apache-airflow-providers-amazon>=8.0.0
+    dbt-athena-community>=1.7.0
   EOF
 }
 

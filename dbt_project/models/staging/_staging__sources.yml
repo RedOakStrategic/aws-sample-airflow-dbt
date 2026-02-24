@@ -2,10 +2,52 @@ version: 2
 
 sources:
   - name: raw
-    database: lakehouse-mvp_sandbox_lakehouse
-    schema: ""
+    description: >
+      Raw data layer containing unprocessed source data from upstream systems.
+      Data lands here via S3 uploads and is cataloged by AWS Glue Crawlers.
+      This layer preserves the original data format and schema for auditability.
+    schema: lakehouse-mvp_sandbox_lakehouse
+    loader: glue_crawler
+    
     tables:
       - name: events
-        description: Raw event data from landing zone
+        description: >
+          Raw event stream data capturing user interactions and system events.
+          Each record represents a single event with associated metadata.
+          Data is ingested as JSON and cataloged by Glue Crawler.
+        columns:
+          - name: event_id
+            description: '{{ doc("event_id") }}'
+          - name: user_id
+            description: '{{ doc("user_id") }}'
+          - name: event_type
+            description: '{{ doc("event_type") }}'
+          - name: event_timestamp
+            description: '{{ doc("event_timestamp") }}'
+          - name: session_id
+            description: '{{ doc("session_id") }}'
+          - name: page
+            description: '{{ doc("page") }}'
+          - name: amount
+            description: '{{ doc("amount") }}'
+        freshness:
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
+        loaded_at_field: event_timestamp
+
       - name: users
-        description: Raw user data from landing zone
+        description: >
+          Raw user profile data containing account information and attributes.
+          Each record represents a registered user in the system.
+          Data is ingested as JSON and cataloged by Glue Crawler.
+        columns:
+          - name: user_id
+            description: '{{ doc("user_id") }}'
+          - name: name
+            description: User's full name as entered during registration
+          - name: email
+            description: '{{ doc("email") }}'
+          - name: created_at
+            description: '{{ doc("created_at") }}'
+          - name: country
+            description: '{{ doc("country") }}'

@@ -2,24 +2,28 @@
 """
 Data Lakehouse Pipeline DAG
 ===========================
-Orchestrates the full data pipeline:
-1. Step Functions: Raw data ingestion and initial processing
-2. dbt: Transform data through staging -> intermediate -> marts layers
-3. dbt tests: Validate data quality
+Orchestrates the full data pipeline via Step Functions:
+1. Step Functions handles: Raw crawling → Lambda dbt transforms (Athena) → Curated crawling → Tests
+2. Airflow monitors the execution and provides scheduling/alerting
+
+Pipeline Steps (executed by Step Functions):
+- RecordPipelineStart: Log execution start to DynamoDB
+- StartRawCrawler: Crawl raw S3 data to Glue catalog
+- RunDbtStaging: Lambda executes staging views via Athena
+- RunDbtMarts: Lambda executes marts Iceberg tables via Athena
+- StartCuratedCrawler: Crawl curated Iceberg tables
+- RunDbtTests: Lambda runs 23+ data quality tests, records to Elementary
+- RecordPipelineSuccess: Log completion to DynamoDB
 
 The pipeline runs daily at 6 AM UTC or can be triggered manually.
 """
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.bash import BashOperator
 from airflow.providers.amazon.aws.operators.step_function import StepFunctionStartExecutionOperator
 from airflow.providers.amazon.aws.sensors.step_function import StepFunctionExecutionSensor
 
 # Configuration - in production, use Airflow Variables
 STATE_MACHINE_ARN = 'arn:aws:states:us-east-1:088130860316:stateMachine:lakehouse-mvp-sandbox-data-pipeline'
-# MWAA syncs S3 dags bucket to /usr/local/airflow/dags/
-DBT_PROJECT_PATH = '/usr/local/airflow/dags/dbt_project'
-DBT_PROFILES_DIR = '/usr/local/airflow/dags/dbt_project'
 
 default_args = {
     'owner': 'data-engineering',
@@ -33,67 +37,42 @@ default_args = {
 with DAG(
     dag_id='lakehouse_raw_to_curated',
     default_args=default_args,
-    description='Full data lakehouse pipeline: Step Functions ingestion + dbt transformations',
+    description='Full data lakehouse pipeline: Step Functions orchestrates ingestion + dbt transformations',
     schedule_interval='0 6 * * *',  # Daily at 6 AM UTC
     start_date=datetime(2024, 1, 1),
     catchup=False,
-    tags=['lakehouse', 'production', 'dbt'],
+    tags=['lakehouse', 'production', 'dbt', 'step-functions'],
 ) as dag:
 
     # ============================================
-    # STAGE 1: Raw Data Ingestion via Step Functions
+    # Start Step Functions Pipeline
     # ============================================
+    # Step Functions handles the complete workflow:
+    # 1. Record pipeline start in DynamoDB
+    # 2. Run raw crawler (catalog raw JSON data)
+    # 3. Execute dbt staging models via Lambda+Athena (views)
+    # 4. Execute dbt marts models via Lambda+Athena (Iceberg tables)
+    # 5. Run curated crawler (catalog Iceberg tables)
+    # 6. Execute dbt tests via Lambda+Athena (23+ data quality tests)
+    # 7. Record test results to Elementary table
+    # 8. Record pipeline completion in DynamoDB
+    
     start_pipeline = StepFunctionStartExecutionOperator(
-        task_id='start_step_functions_pipeline',
+        task_id='start_pipeline',
         state_machine_arn=STATE_MACHINE_ARN,
     )
 
-    wait_for_ingestion = StepFunctionExecutionSensor(
-        task_id='wait_for_ingestion',
-        execution_arn="{{ task_instance.xcom_pull(task_ids='start_step_functions_pipeline') }}",
-        poke_interval=60,
-        timeout=3600,  # 1 hour timeout
-    )
-
     # ============================================
-    # STAGE 2: dbt Transformations
+    # Wait for Pipeline Completion
     # ============================================
-    
-    # Install dbt dependencies (packages like elementary)
-    dbt_deps = BashOperator(
-        task_id='dbt_deps',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt deps --profiles-dir {DBT_PROFILES_DIR}',
-    )
-
-    # Run staging models first (views on raw data)
-    dbt_run_staging = BashOperator(
-        task_id='dbt_run_staging',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir {DBT_PROFILES_DIR} --select staging',
-    )
-
-    # Run intermediate models (enriched data)
-    dbt_run_intermediate = BashOperator(
-        task_id='dbt_run_intermediate',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir {DBT_PROFILES_DIR} --select intermediate',
-    )
-
-    # Run mart models (business-ready Iceberg tables)
-    dbt_run_marts = BashOperator(
-        task_id='dbt_run_marts',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt run --profiles-dir {DBT_PROFILES_DIR} --select marts',
-    )
-
-    # ============================================
-    # STAGE 3: Data Quality Tests
-    # ============================================
-    dbt_test = BashOperator(
-        task_id='dbt_test',
-        bash_command=f'cd {DBT_PROJECT_PATH} && dbt test --profiles-dir {DBT_PROFILES_DIR}',
+    wait_for_completion = StepFunctionExecutionSensor(
+        task_id='wait_for_completion',
+        execution_arn="{{ task_instance.xcom_pull(task_ids='start_pipeline') }}",
+        poke_interval=60,  # Check every minute
+        timeout=7200,  # 2 hour timeout
     )
 
     # ============================================
     # Pipeline Dependencies
     # ============================================
-    # Step Functions ingestion -> dbt transformations -> tests
-    start_pipeline >> wait_for_ingestion >> dbt_deps
-    dbt_deps >> dbt_run_staging >> dbt_run_intermediate >> dbt_run_marts >> dbt_test
+    start_pipeline >> wait_for_completion

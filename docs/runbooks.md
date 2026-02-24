@@ -5,9 +5,10 @@ This document provides step-by-step guides for common operational tasks in the A
 ## Table of Contents
 
 - [Pipeline Operations](#pipeline-operations)
+- [Lambda Operations](#lambda-operations)
 - [Glue Crawler Operations](#glue-crawler-operations)
 - [MWAA Operations](#mwaa-operations)
-- [dbt Operations](#dbt-operations)
+- [Elementary & Data Quality](#elementary--data-quality)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -18,74 +19,124 @@ This document provides step-by-step guides for common operational tasks in the A
 
 **Via AWS Console:**
 1. Navigate to AWS Step Functions console
-2. Select the `lakehouse-{env}-data-pipeline` state machine
+2. Select the `lakehouse-mvp-{env}-data-pipeline` state machine
 3. Click "Start execution"
 4. Enter input JSON:
    ```json
    {
-     "triggered_by": "manual",
-     "execution_date": "2024-01-15"
+     "Execution": {
+       "StartTime": "2026-02-24T10:00:00Z",
+       "Id": "manual-test-001"
+     }
    }
    ```
 5. Click "Start execution"
 
 **Via AWS CLI:**
 ```bash
-# Start a new execution
+# Start a new execution with proper input format
 aws stepfunctions start-execution \
-  --state-machine-arn arn:aws:states:us-east-1:ACCOUNT_ID:stateMachine:lakehouse-sandbox-data-pipeline \
-  --input '{"triggered_by": "manual", "execution_date": "2024-01-15"}'
+  --state-machine-arn arn:aws:states:us-east-1:ACCOUNT_ID:stateMachine:lakehouse-mvp-sandbox-data-pipeline \
+  --input '{"Execution": {"StartTime": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'", "Id": "manual-'$(date +%s)'"}}' \
+  --profile ros-sandbox
 ```
 
-### Check Pipeline Status
+### Pipeline Steps
 
-**Via AWS Console:**
-1. Navigate to Step Functions console
-2. Select the state machine
-3. View "Executions" tab for recent runs
-4. Click on an execution to see detailed state transitions
+The Step Functions pipeline executes these steps in order:
+1. **RecordPipelineStart** - Records execution start in DynamoDB
+2. **StartRawCrawler** - Crawls raw S3 data to update Glue catalog
+3. **WaitForRawCrawler** - Polls until crawler completes
+4. **RunDbtStaging** - Lambda executes staging views via Athena
+5. **RunDbtMarts** - Lambda executes marts Iceberg tables via Athena
+6. **StartCuratedCrawler** - Crawls curated Iceberg tables
+7. **WaitForCuratedCrawler** - Polls until crawler completes
+8. **RunDbtTests** - Lambda runs 23+ data quality tests via Athena
+9. **RecordPipelineSuccess** - Records completion in DynamoDB
+
+### Check Pipeline Status
 
 **Via AWS CLI:**
 ```bash
 # List recent executions
 aws stepfunctions list-executions \
-  --state-machine-arn arn:aws:states:us-east-1:ACCOUNT_ID:stateMachine:lakehouse-sandbox-data-pipeline \
-  --max-results 10
+  --state-machine-arn arn:aws:states:us-east-1:ACCOUNT_ID:stateMachine:lakehouse-mvp-sandbox-data-pipeline \
+  --max-results 10 \
+  --profile ros-sandbox
 
 # Get execution details
 aws stepfunctions describe-execution \
-  --execution-arn arn:aws:states:us-east-1:ACCOUNT_ID:execution:lakehouse-sandbox-data-pipeline:EXECUTION_ID
-
-# Get execution history (state transitions)
-aws stepfunctions get-execution-history \
-  --execution-arn arn:aws:states:us-east-1:ACCOUNT_ID:execution:lakehouse-sandbox-data-pipeline:EXECUTION_ID
+  --execution-arn EXECUTION_ARN \
+  --profile ros-sandbox
 ```
 
 **Via DynamoDB (Pipeline Metadata):**
 ```bash
-# Query pipeline runs by date
-aws dynamodb query \
-  --table-name lakehouse-sandbox-pipeline-metadata \
-  --key-condition-expression "pipeline_name = :name" \
-  --expression-attribute-values '{":name": {"S": "raw_to_curated"}}' \
-  --scan-index-forward false \
-  --limit 10
+# Scan recent pipeline runs
+aws dynamodb scan \
+  --table-name lakehouse-mvp-sandbox-pipeline-metadata \
+  --profile ros-sandbox \
+  --output text --query 'Items[*].[pipeline_name.S, status.S, execution_date.S]'
 ```
 
-### Cancel a Running Pipeline
+---
 
-**Via AWS Console:**
-1. Navigate to Step Functions console
-2. Select the running execution
-3. Click "Stop execution"
-4. Choose stop reason: "Abort" (immediate) or "Stop" (graceful)
+## Lambda Operations
 
-**Via AWS CLI:**
+### dbt Executor Lambda
+
+Executes dbt-style transformations via Athena SQL.
+
+**Test staging layer:**
 ```bash
-# Stop execution (allows cleanup)
-aws stepfunctions stop-execution \
-  --execution-arn arn:aws:states:us-east-1:ACCOUNT_ID:execution:lakehouse-sandbox-data-pipeline:EXECUTION_ID \
-  --cause "Manual cancellation - reason here"
+aws lambda invoke \
+  --function-name lakehouse-mvp-sandbox-dbt-executor \
+  --payload '{"action": "run_layer", "layer": "staging", "s3_location": "s3://lakehouse-mvp-sandbox-data-lake/curated"}' \
+  --profile ros-sandbox \
+  response.json && cat response.json
+```
+
+**Test marts layer:**
+```bash
+aws lambda invoke \
+  --function-name lakehouse-mvp-sandbox-dbt-executor \
+  --payload '{"action": "run_layer", "layer": "marts", "s3_location": "s3://lakehouse-mvp-sandbox-data-lake/curated"}' \
+  --profile ros-sandbox \
+  response.json && cat response.json
+```
+
+### dbt Test Executor Lambda
+
+Runs data quality tests and records results to Elementary.
+
+**Run all tests:**
+```bash
+aws lambda invoke \
+  --function-name lakehouse-mvp-sandbox-dbt-test-executor \
+  --payload '{"action": "run_tests"}' \
+  --profile ros-sandbox \
+  response.json && cat response.json
+```
+
+**Run tests for specific layer:**
+```bash
+aws lambda invoke \
+  --function-name lakehouse-mvp-sandbox-dbt-test-executor \
+  --payload '{"action": "run_tests", "layer": "staging"}' \
+  --profile ros-sandbox \
+  response.json && cat response.json
+```
+
+### View Lambda Logs
+
+```bash
+# View recent dbt executor logs
+aws logs tail /aws/lambda/lakehouse-mvp-sandbox-dbt-executor \
+  --since 1h --profile ros-sandbox
+
+# View recent test executor logs
+aws logs tail /aws/lambda/lakehouse-mvp-sandbox-dbt-test-executor \
+  --since 1h --profile ros-sandbox
 ```
 
 ---
@@ -264,89 +315,81 @@ aws mwaa create-cli-token --name lakehouse-sandbox-mwaa
 
 ---
 
-## dbt Operations
+## Elementary & Data Quality
 
-### Run Specific Models
+### Query Test Results
 
+**View recent test results:**
 ```bash
-# Navigate to dbt project
-cd dbt_project
-
-# Run a single model
-dbt run --select stg_raw_events
-
-# Run a model and its dependencies
-dbt run --select +fct_events
-
-# Run a model and its dependents
-dbt run --select fct_events+
-
-# Run all models in a directory
-dbt run --select staging.*
-
-# Run all mart models
-dbt run --select marts.*
-
-# Run with full refresh (rebuild from scratch)
-dbt run --select fct_events --full-refresh
+aws athena start-query-execution \
+  --query-string "SELECT test_name, status, failures, detected_at FROM elementary_test_results ORDER BY detected_at DESC LIMIT 30" \
+  --query-execution-context "Database=lakehouse-mvp_sandbox_lakehouse" \
+  --work-group lakehouse-mvp-sandbox-workgroup \
+  --profile ros-sandbox
 ```
 
-### Run Tests
-
+**Count tests by status:**
 ```bash
-# Run all tests
-dbt test
-
-# Run tests for specific model
-dbt test --select fct_events
-
-# Run only schema tests
-dbt test --select test_type:schema
-
-# Run only data tests
-dbt test --select test_type:data
-
-# Run source freshness tests
-dbt source freshness
+aws athena start-query-execution \
+  --query-string "SELECT status, COUNT(*) as count FROM elementary_test_results GROUP BY status" \
+  --query-execution-context "Database=lakehouse-mvp_sandbox_lakehouse" \
+  --work-group lakehouse-mvp-sandbox-workgroup \
+  --profile ros-sandbox
 ```
 
-### Debug Failed Models
-
-**Step 1: Check compilation**
+**View test history for a specific model:**
 ```bash
-# Compile model to see generated SQL
-dbt compile --select fct_events
-
-# View compiled SQL
-cat target/compiled/lakehouse_mvp/models/marts/fct_events.sql
+aws athena start-query-execution \
+  --query-string "SELECT test_name, status, failures, detected_at FROM elementary_test_results WHERE table_name = 'fct_events' ORDER BY detected_at DESC LIMIT 20" \
+  --query-execution-context "Database=lakehouse-mvp_sandbox_lakehouse" \
+  --work-group lakehouse-mvp-sandbox-workgroup \
+  --profile ros-sandbox
 ```
 
-**Step 2: Run with verbose logging**
+### Test Coverage
+
+The pipeline runs 23+ data quality tests:
+
+| Model | Test Type | Tests |
+|-------|-----------|-------|
+| `stg_raw_events` | not_null | event_id, user_id, event_type, event_timestamp |
+| `stg_raw_events` | unique | event_id |
+| `stg_raw_users` | not_null | user_id, username, email |
+| `stg_raw_users` | unique | user_id, email |
+| `fct_events` | not_null | event_id, user_id, event_type, event_timestamp, event_date |
+| `fct_events` | unique | event_id |
+| `fct_events` | accepted_values | event_type (page_view, click, purchase, signup, login, logout) |
+| `dim_users` | not_null | user_id, username, email, created_at |
+| `dim_users` | unique | user_id, email |
+
+### Investigate Failed Tests
+
+**Find failing tests:**
 ```bash
-dbt run --select fct_events --debug
+aws athena start-query-execution \
+  --query-string "SELECT test_name, table_name, column_name, failures, detected_at FROM elementary_test_results WHERE status = 'fail' ORDER BY detected_at DESC" \
+  --query-execution-context "Database=lakehouse-mvp_sandbox_lakehouse" \
+  --work-group lakehouse-mvp-sandbox-workgroup \
+  --profile ros-sandbox
 ```
 
-**Step 3: Test SQL directly in Athena**
-1. Copy compiled SQL from `target/compiled/`
-2. Open Athena console
-3. Run the query to see detailed error messages
-
-**Step 4: Check dbt logs**
+**Check for null values (example):**
 ```bash
-# View recent logs
-cat logs/dbt.log | tail -100
-
-# Search for errors
-grep -i "error" logs/dbt.log
+aws athena start-query-execution \
+  --query-string "SELECT * FROM fct_events WHERE event_id IS NULL LIMIT 10" \
+  --query-execution-context "Database=lakehouse-mvp_sandbox_lakehouse" \
+  --work-group lakehouse-mvp-sandbox-workgroup \
+  --profile ros-sandbox
 ```
 
-**Common dbt issues:**
-
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Table not found | Missing dependency | Run upstream models first |
-| Permission denied | IAM role | Check Athena workgroup permissions |
-| Iceberg error | Table format | Verify Iceberg configuration |
+**Check for duplicates (example):**
+```bash
+aws athena start-query-execution \
+  --query-string "SELECT event_id, COUNT(*) as cnt FROM fct_events GROUP BY event_id HAVING COUNT(*) > 1" \
+  --query-execution-context "Database=lakehouse-mvp_sandbox_lakehouse" \
+  --work-group lakehouse-mvp-sandbox-workgroup \
+  --profile ros-sandbox
+```
 | Timeout | Large dataset | Optimize query or increase timeout |
 
 ---

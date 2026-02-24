@@ -1,5 +1,5 @@
 {
-  "Comment": "Data Lakehouse Pipeline - Crawl, Transform, Catalog",
+  "Comment": "Data Lakehouse Pipeline - Crawl, Transform via Lambda+Athena, Catalog",
   "StartAt": "RecordPipelineStart",
   "States": {
     "RecordPipelineStart": {
@@ -13,7 +13,7 @@
           "execution_id": {"S.$": "$$.Execution.Id"},
           "status": {"S": "RUNNING"},
           "start_time": {"S.$": "$$.Execution.StartTime"},
-          "triggered_by": {"S": "airflow"}
+          "triggered_by": {"S": "step_functions"}
         }
       },
       "ResultPath": null,
@@ -99,27 +99,57 @@
         {
           "Variable": "$.crawlerStatus.Crawler.State",
           "StringEquals": "READY",
-          "Next": "RunDbtTransformations"
+          "Next": "RunDbtStaging"
         }
       ],
       "Default": "WaitForRawCrawler"
     },
-    "RunDbtTransformations": {
+    "RunDbtStaging": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "QueryString": "-- dbt run placeholder - actual implementation uses dbt CLI\nSELECT 1 as placeholder",
-        "WorkGroup": "${AthenaWorkgroup}",
-        "QueryExecutionContext": {
-          "Database": "${GlueDatabaseName}"
+        "FunctionName": "${DbtExecutorLambdaArn}",
+        "Payload": {
+          "action": "run_layer",
+          "layer": "staging",
+          "s3_location": "s3://${DataLakeBucket}/curated"
         }
       },
-      "ResultPath": "$.athenaResult",
+      "ResultPath": "$.stagingResult",
+      "Next": "RunDbtMarts",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
+    },
+    "RunDbtMarts": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${DbtExecutorLambdaArn}",
+        "Payload": {
+          "action": "run_layer",
+          "layer": "marts",
+          "s3_location": "s3://${DataLakeBucket}/curated"
+        }
+      },
+      "ResultPath": "$.martsResult",
       "Next": "StartCuratedCrawler",
       "Retry": [
         {
-          "ErrorEquals": ["States.TaskFailed", "Athena.InvalidRequestException"],
-          "IntervalSeconds": 10,
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 5,
           "MaxAttempts": 3,
           "BackoffRate": 2.0
         }
@@ -197,10 +227,37 @@
         {
           "Variable": "$.crawlerStatus.Crawler.State",
           "StringEquals": "READY",
-          "Next": "RecordPipelineSuccess"
+          "Next": "RunDbtTests"
         }
       ],
       "Default": "WaitForCuratedCrawler"
+    },
+    "RunDbtTests": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${DbtTestExecutorLambdaArn}",
+        "Payload": {
+          "action": "run_tests"
+        }
+      },
+      "ResultPath": "$.testResult",
+      "Next": "RecordPipelineSuccess",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "RecordPipelineFailure"
+        }
+      ]
     },
     "RecordPipelineSuccess": {
       "Type": "Task",

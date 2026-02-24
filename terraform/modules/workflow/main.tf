@@ -19,14 +19,19 @@ resource "aws_sfn_state_machine" "data_pipeline" {
   type     = "STANDARD"
 
   definition = templatefile("${path.module}/state_machine.json", {
-    MetadataTableName  = var.metadata_table_name
-    RawCrawlerName     = var.raw_crawler_name
-    CuratedCrawlerName = var.curated_crawler_name
-    GlueDatabaseName   = var.glue_database_name
-    AthenaWorkgroup    = var.athena_workgroup
+    MetadataTableName          = var.metadata_table_name
+    RawCrawlerName             = var.raw_crawler_name
+    CuratedCrawlerName         = var.curated_crawler_name
+    GlueDatabaseName           = var.glue_database_name
+    AthenaWorkgroup            = var.athena_workgroup
+    DbtExecutorLambdaArn       = aws_lambda_function.dbt_executor.arn
+    DbtTestExecutorLambdaArn   = aws_lambda_function.dbt_test_executor.arn
+    DataLakeBucket             = var.data_lake_bucket_name
   })
 
   tags = local.default_tags
+
+  depends_on = [aws_lambda_function.dbt_executor, aws_lambda_function.dbt_test_executor]
 }
 
 # IAM Role for Step Functions
